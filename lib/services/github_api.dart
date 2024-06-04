@@ -6,12 +6,14 @@ import 'package:injectable/injectable.dart';
 import 'package:revanced_manager/app/app.locator.dart';
 import 'package:revanced_manager/services/download_manager.dart';
 import 'package:revanced_manager/services/manager_api.dart';
+import 'package:synchronized/synchronized.dart';
 
 @lazySingleton
 class GithubAPI {
   late final Dio _dio;
   late final ManagerAPI _managerAPI = locator<ManagerAPI>();
   late final DownloadManager _downloadManager = locator<DownloadManager>();
+  final Map<String, Lock> _lockMap = {};
 
   Future<void> initialize(String repoUrl) async {
     _dio = _downloadManager.initDio(repoUrl);
@@ -21,11 +23,21 @@ class GithubAPI {
     await _downloadManager.clearAllCache();
   }
 
+  Future<Response> _dioGetSynchronously(String path) async {
+    // Create a new Lock for each path
+    if (!_lockMap.containsKey(path)) {
+      _lockMap[path] = Lock();
+    }
+    return _lockMap[path]!.synchronized(() async {
+      return await _dio.get(path);
+    });
+  }
+
   Future<Map<String, dynamic>?> getLatestRelease(
     String repoName,
   ) async {
     try {
-      final response = await _dio.get(
+      final response = await _dioGetSynchronously(
         '/repos/$repoName/releases/latest',
       );
       return response.data;
@@ -38,32 +50,29 @@ class GithubAPI {
   }
 
   Future<Map<String, dynamic>?> getLatestReleaseWithPreReleases(String repoName) async {
+    /*
+    * Loop through all releases (including pre-releases) and return the latest
+    */
     try {
-      final Response response = await _dio.get('/repos/$repoName/releases');
+      final Response response = await _dioGetSynchronously('/repos/$repoName/releases?per_page=10');
       final List<dynamic> releases = response.data;
 
-      if (releases.isEmpty) {
-        return getLatestRelease(repoName);
-      }
+      if (releases.isEmpty) return getLatestRelease(repoName);
 
-      Map<String, dynamic>? latestPreRelease;
-      DateTime latestPreReleaseDate = DateTime.fromMillisecondsSinceEpoch(0);
+      Map<String, dynamic>? latestRelease;
+      DateTime latestReleaseDate = DateTime.fromMillisecondsSinceEpoch(0);
 
-      for (final release in releases) {
-        if (release['prerelease'] == true) {
-          final DateTime releaseDate = DateTime.parse(release['published_at']);
-          if (releaseDate.isAfter(latestPreReleaseDate)) {
-            latestPreReleaseDate = releaseDate;
-            latestPreRelease = release;
-          }
+      for (final release in releases) { 
+        final DateTime releaseDate = DateTime.parse(release['published_at']);
+        if (releaseDate.isAfter(latestReleaseDate)) {
+          latestReleaseDate = releaseDate;
+          latestRelease = release;
         }
       }
 
-      if (latestPreRelease == null) {
-        return getLatestRelease(repoName);
-      }
+      if (latestRelease == null) return getLatestRelease(repoName);
 
-      return latestPreRelease;
+      return latestRelease;
     } catch (e) {
       if (kDebugMode) {
         print(e);
@@ -76,8 +85,8 @@ class GithubAPI {
     String repoName,
   ) async {
     try {
-      final response = await _dio.get(
-        '/repos/$repoName/releases',
+      final response = await _dioGetSynchronously(
+        '/repos/$repoName/releases?per_page=10',
       );
       final Map<String, dynamic> releases = response.data[0];
       int updates = 0;
@@ -122,7 +131,7 @@ class GithubAPI {
           url,
         );
       }
-      final response = await _dio.get(
+      final response = await _dioGetSynchronously(
         '/repos/$repoName/releases/tags/$version',
       );
       final Map<String, dynamic>? release = response.data;

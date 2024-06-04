@@ -344,8 +344,6 @@ class MainActivity : FlutterActivity() {
 
                 if (cancel(patcher::close)) return@Thread
 
-                // Use the locally released ReVanced Library.
-                // TODO: reflect this as a lib.patch file so that it can also be used in github actions.
                 if (ripLibs) {
                     patcherResult.applyTo(inFile, arrayOf("armeabi-v7a", "x86", "x86_64"))
                 } else {

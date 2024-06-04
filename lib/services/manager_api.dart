@@ -78,8 +78,7 @@ class ManagerAPI {
     if (!hasMigratedToAlternativeSource) {
       final String patchesRepo = getPatchesRepo();
       final String integrationsRepo = getIntegrationsRepo();
-      final bool usingAlternativeSources = patchesRepo.toLowerCase() != defaultPatchesRepo || integrationsRepo.toLowerCase() != defaultIntegrationsRepo;
-      _prefs.setBool('useAlternativeSources', usingAlternativeSources);
+      _prefs.setBool('useAlternativeSources', true);
       _prefs.setBool('migratedToAlternativeSource', true);
     }
   }
